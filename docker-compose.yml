@@ -1,0 +1,78 @@
+---
+version: '3.8'
+services:
+  gateway:
+    image: ${IMAGE_NAME:-apicast-test}
+    depends_on:
+    - redis
+    - echo
+    env_file: .env
+    environment:
+      THREESCALE_PORTAL_ENDPOINT: http://echo:8081/config/
+  echo:
+    image: ${IMAGE_NAME:-apicast-test}
+    environment:
+      APICAST_CONFIGURATION_LOADER: test
+      APICAST_MANAGEMENT_API: debug
+    command: bin/apicast
+    ports:
+      - '8081'
+  dev:
+    image: ${IMAGE_NAME:-apicast-test}
+    depends_on:
+    - redis
+    ports:
+      - "8080:8080"
+      - "8090:8090"
+    volumes:
+      - .:/opt/app-root/src
+    env_file: .env
+    environment:
+      TEST_NGINX_BINARY: openresty
+      TEST_NGINX_REDIS_HOST: redis
+    dns_search:
+      - example.com
+  test:
+    image: ${IMAGE_NAME:-apicast-test}
+    depends_on:
+      - gateway
+    entrypoint: ""
+    dns: 127.0.0.1
+    environment:
+      APICAST_MANAGEMENT_API: debug
+      APICAST_LOG_LEVEL: debug
+      APICAST_CONFIGURATION_LOADER: test
+    dns_search:
+      - example.com
+  redis:
+    image: redis
+  keycloak:
+    image: jboss/keycloak:3.1.0.Final
+    environment:
+      KEYCLOAK_USER: keycloak
+      KEYCLOAK_PASSWORD: keycloak
+      KEYCLOAK_LOGLEVEL: INFO
+    ports:
+      - "8080"
+  opentracing-instrumented-gateway:
+    image: ${IMAGE_NAME:-apicast-test}
+    depends_on:
+    - jaeger
+    environment:
+      THREESCALE_CONFIG_FILE: /tmp/config.json
+      THREESCALE_DEPLOYMENT_ENV: staging
+      APICAST_CONFIGURATION_LOADER: lazy
+      APICAST_LOG_LEVEL: debug
+      APICAST_CONFIGURATION_CACHE: "0"
+      OPENTRACING_TRACER: jaeger
+      OPENTRACING_CONFIG: /opt/app-root/src/tracing-configs/tracing-config-jaeger-jaeger-config.json
+    volumes:
+      - ./examples/opentracing/apicast-config.json:/tmp/config.json
+      - ./examples/opentracing/jaeger-config.json:/opt/app-root/src/tracing-configs/tracing-config-jaeger-jaeger-config.json
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      JAEGER_DISABLED: "false"
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - 16686:16686
