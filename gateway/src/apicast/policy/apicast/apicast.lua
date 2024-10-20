@@ -5,6 +5,9 @@ local math = math
 local setmetatable = setmetatable
 local assert = assert
 local table_insert = table.insert
+local base = require "resty.core.base"
+local get_request = base.get_request
+local tls = require 'resty.tls'
 
 local user_agent = require('apicast.user_agent')
 
@@ -156,6 +159,40 @@ function _M:export()
     }
 end
 
-_M.balancer = balancer.call
+function _M:balancer(context)
+  -- All of this happens on balancer because this is subrequest inside APICAst
+  --to @upstream, so the request need to be the one that connects to the
+  --upstreamssl_client_raw_cert0
+  local r = get_request()
+  if not r then
+    ngx.log(ngx.WARN, "Invalid request")
+    return
+  end
+
+  if context.upstream_certificate and context.upstream_key then
+    local ok, err = tls.set_upstream_cert_and_key(context.upstream_certificate, context.upstream_key)
+    if ok ~= nil then
+      ngx.log(ngx.ERR, "Certificate cannot be set correctly, err: ", err)
+    end
+  end
+
+  if context.upstream_verify then
+    local ok, err = tls.set_upstream_ssl_verify(true, 1)
+    if ok ~= nil then
+      ngx.log(ngx.WARN, "Cannot verify SSL upstream connection, err: ", err)
+    end
+
+    if not context.upstream_ca_store then
+      ngx.log(ngx.WARN, "Set verify without including CA certificates")
+    end
+
+    ok, err = tls.set_upstream_ca_cert(context.upstream_ca_store)
+    if ok ~= nil then
+      ngx.log(ngx.WARN, "Cannot set a valid trusted CA store, err: ", err)
+    end
+  end
+
+  balancer:call(context)
+end
 
 return _M

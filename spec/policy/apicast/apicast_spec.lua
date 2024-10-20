@@ -1,4 +1,10 @@
 local _M = require 'apicast.policy.apicast'
+local util = require("apicast.util")
+local ssl = require('ngx.ssl')
+local tls = require('resty.tls')
+local X509_STORE = require('resty.openssl.x509.store')
+local X509 = require('resty.openssl.x509')
+local balancer = require('apicast.balancer')
 
 describe('APIcast policy', function()
   local ngx_on_abort_stub
@@ -28,6 +34,77 @@ describe('APIcast policy', function()
       apicast:access(context)
 
       assert.is_true(context[apicast].run_post_action)
+    end)
+  end)
+
+  describe(".balancer", function()
+    local certificate_path = 't/fixtures/CA/root-ca.crt'
+    local certificate_key_path = 't/fixtures/CA/root-ca.key'
+
+    local certificate_content = util.read_file(certificate_path)
+    local key_content = util.read_file(certificate_key_path)
+    local ca_cert, _ = X509.parse_pem_cert(certificate_content)
+
+    local ca_store = X509_STORE.new()
+    ca_store:add_cert(ca_cert)
+
+    local cert = ssl.parse_pem_cert(certificate_content)
+    local key = ssl.parse_pem_priv_key(key_content)
+
+    before_each(function()
+      stub.new(balancer, 'call', function() return true end)
+    end)
+
+    it("correctly set certificate and key", function()
+        local apicast = _M.new()
+        local context = {
+          upstream_certificate = cert,
+          upstream_key = key,
+        }
+
+        spy.on(tls, "set_upstream_cert_and_key")
+        apicast:balancer(context)
+        assert.spy(tls.set_upstream_cert_and_key).was.called()
+    end)
+
+    it("ignore invalid certificate and key", function()
+        local apicast = _M.new()
+        local context = {
+          upstream_certificate = nil,
+          upstream_key = nil,
+        }
+
+        spy.on(tls, "set_upstream_cert_and_key")
+        apicast:balancer(context)
+        assert.spy(tls.set_upstream_cert_and_key).was_not.called()
+    end)
+
+    it("CA certificate is not used if verify is not enabled", function()
+        local apicast = _M.new()
+        local context = {
+          upstream_certificate = cert,
+          upstream_key = key,
+          upstream_verify = false,
+          upstream_ca_store = cert
+        }
+
+        spy.on(tls, "set_upstream_ca_store")
+        apicast:balancer(context)
+        assert.spy(tls.set_upstream_ca_store).was_not.called()
+    end)
+
+    it("CA certificate is used if verify is enabled", function()
+        local apicast = _M.new()
+        local context = {
+          upstream_certificate = cert,
+          upstream_key = key,
+          upstream_verify = true,
+          upstream_ca_store = ca_store.store
+        }
+
+        spy.on(tls, "set_upstream_ca_store")
+        apicast:balancer(context)
+        assert.spy(tls.set_upstream_ca_store).was_not.called()
     end)
   end)
 

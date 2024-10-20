@@ -42,3 +42,5 @@ When using http forms and file upload
 This policy overwrites `APICAST_PROXY_HTTPS_CERTIFICATE_KEY` and
 `APICAST_PROXY_HTTPS_CERTIFICATE` values and it uses the certificates set by
 the policy, so those environment variables will have no effect.
+
+This policy is not compatible with Camel proxy.

@@ -1143,3 +1143,139 @@ POST /test?user_key=
 --- no_error_log env
 ["[error]",
 "using proxy: $TEST_NGINX_HTTP_PROXY "]
+
+
+=== TEST 18: MTLS connection to upstream via proxy failed
+--- configuration random_port env
+{
+  "services": [
+    {
+      "backend_version":  1,
+      "proxy": {
+        "api_backend": "https://test-upstream.lvh.me:$TEST_NGINX_RANDOM_PORT",
+        "proxy_rules": [
+          { "pattern": "/", "http_method": "GET", "metric_system_name": "hits", "delta": 2 }
+        ],
+        "policy_chain": [
+          {
+            "name": "apicast.policy.apicast"
+          },
+          {
+            "name": "apicast.policy.http_proxy",
+            "configuration": {
+                "https_proxy": "$TEST_NGINX_HTTPS_PROXY"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+--- backend env
+  server_name test-backend.lvh.me;
+  listen $TEST_NGINX_RANDOM_PORT ssl;
+  ssl_certificate $TEST_NGINX_SERVER_ROOT/html/server.crt;
+  ssl_certificate_key $TEST_NGINX_SERVER_ROOT/html/server.key;
+  location /transactions/authrep.xml {
+    content_by_lua_block {
+      ngx.exit(ngx.OK)
+    }
+  }
+--- upstream env
+server_name test-upstream.lvh.me;
+listen $TEST_NGINX_RANDOM_PORT ssl;
+ssl_certificate $TEST_NGINX_SERVER_ROOT/html/server.crt;
+ssl_certificate_key $TEST_NGINX_SERVER_ROOT/html/server.key;
+ssl_client_certificate $TEST_NGINX_SERVER_ROOT/html/client.crt;
+ssl_verify_client on;
+location /test {
+  echo 'ssl_client_s_dn: \$ssl_client_s_dn';
+  echo 'ssl_client_i_dn: \$ssl_client_i_dn';
+}
+--- request
+GET /test?user_key=value
+--- error_code: 400
+--- error_log env
+using proxy: $TEST_NGINX_HTTPS_PROXY
+proxy request: CONNECT test-upstream.lvh.me:$TEST_NGINX_RANDOM_PORT HTTP/1.1
+client sent no required SSL certificate while reading client request headers
+--- no_error_log
+[error]
+--- user_files fixture=mutual_ssl.pl eval
+
+
+
+=== TEST 19: MTLS connection to upstream via proxy when certificates are provided
+--- configuration random_port env eval
+<<EOF
+{
+  "services": [
+    {
+      "backend_version":  1,
+      "proxy": {
+        "api_backend": "https://test-upstream.lvh.me:$TEST_NGINX_RANDOM_PORT",
+        "proxy_rules": [
+          { "pattern": "/", "http_method": "GET", "metric_system_name": "hits", "delta": 2 }
+        ],
+        "policy_chain": [
+          {
+            "name": "apicast.policy.upstream_mtls",
+            "configuration": {
+                "certificate": "$ENV{TEST_NGINX_SERVER_ROOT}/html/client.crt",
+                "certificate_type": "path",
+                "certificate_key": "$ENV{TEST_NGINX_SERVER_ROOT}/html/client.key",
+                "certificate_key_type": "path",
+                "ca_certificates": [
+                  "$Test::Nginx::Util::UPSTREAM_CA_CERT"
+                ],
+                "verify": true
+            }
+          },
+          {
+            "name": "apicast.policy.http_proxy",
+            "configuration": {
+                "https_proxy": "$TEST_NGINX_HTTPS_PROXY"
+            }
+          },
+          {
+            "name": "apicast.policy.apicast"
+          }
+        ]
+      }
+    }
+  ]
+}
+EOF
+--- backend env
+  server_name test-backend.lvh.me;
+  listen $TEST_NGINX_RANDOM_PORT ssl;
+  ssl_certificate $TEST_NGINX_SERVER_ROOT/html/server.crt;
+  ssl_certificate_key $TEST_NGINX_SERVER_ROOT/html/server.key;
+  location /transactions/authrep.xml {
+    content_by_lua_block {
+      ngx.exit(ngx.OK)
+    }
+  }
+--- upstream env
+server_name test-upstream.lvh.me;
+listen $TEST_NGINX_RANDOM_PORT ssl;
+ssl_certificate $TEST_NGINX_SERVER_ROOT/html/server.crt;
+ssl_certificate_key $TEST_NGINX_SERVER_ROOT/html/server.key;
+ssl_client_certificate $TEST_NGINX_SERVER_ROOT/html/client.crt;
+ssl_verify_client on;
+location /test {
+  echo 'ssl_client_s_dn: $ssl_client_s_dn';
+  echo 'ssl_client_i_dn: $ssl_client_i_dn';
+}
+--- request
+GET /test?user_key=value
+--- response_body
+ssl_client_s_dn: CN=localhost,OU=APIcast,O=3scale
+ssl_client_i_dn: CN=localhost,OU=APIcast,O=3scale
+--- error_code: 200
+--- error_log env
+using proxy: $TEST_NGINX_HTTPS_PROXY
+proxy request: CONNECT test-upstream.lvh.me:$TEST_NGINX_RANDOM_PORT HTTP/1.1
+--- no_error_log
+[error]
+--- user_files fixture=mutual_ssl.pl eval

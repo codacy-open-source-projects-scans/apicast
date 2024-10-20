@@ -1,21 +1,13 @@
 local upstream_mtls = require("apicast.policy.upstream_mtls")
 local ssl = require('ngx.ssl')
-local open = io.open
-
-local function read_file(path)
-    local file = open(path, "rb")
-    if not file then return nil end
-    local content = file:read "*a" -- *a or *all reads the whole file
-    file:close()
-    return content
-end
+local util = require("apicast.util")
 
 describe('Upstream MTLS policy', function()
 
   local certificate_path = 't/fixtures/CA/root-ca.crt'
   local certificate_key_path = 't/fixtures/CA/root-ca.key'
 
-  local certificate_content = read_file(certificate_path)
+  local certificate_content = util.read_file(certificate_path)
   -- Set here the const to not use the pakcage ones, if not test will not fail
   -- if changes0
   local path_type = "path"
@@ -43,9 +35,10 @@ describe('Upstream MTLS policy', function()
       assert.truthy(object.cert)
       assert.truthy(object.cert_key)
 
-      spy.on(object, "set_certs")
-      object:balancer(context)
-      assert.spy(object.set_certs).was.called()
+      local context = {}
+      object:access(context)
+      assert.truthy(context.upstream_certificate)
+      assert.truthy(context.upstream_key)
     end)
 
 
@@ -62,9 +55,10 @@ describe('Upstream MTLS policy', function()
       assert.is_falsy(object.cert)
       assert.is_falsy(object.cert_key)
 
-      spy.on(object, "set_certs")
-      object:balancer(context)
-      assert.spy(object.set_certs).was_not_called()
+      local context = {}
+      object:access(context)
+      assert.is_falsy(context.upstream_certificate)
+      assert.is_falsy(context.upstream_key)
     end)
   end)
 
@@ -86,9 +80,10 @@ describe('Upstream MTLS policy', function()
       assert.truthy(object.cert)
       assert.truthy(object.cert_key)
 
-      spy.on(object, "set_certs")
-      object:balancer(context)
-      assert.spy(object.set_certs).was.called()
+      local context = {}
+      object:access(context)
+      assert.truthy(context.upstream_certificate)
+      assert.truthy(context.upstream_key)
     end)
 
     it("Nil certificate", function()
@@ -103,10 +98,10 @@ describe('Upstream MTLS policy', function()
       assert.spy(ssl.parse_pem_priv_key).was_not_called()
       assert.falsy(object.cert)
       assert.falsy(object.cert_key)
-
-      spy.on(object, "set_certs")
-      object:balancer(context)
-      assert.spy(object.set_certs).was_not_called()
+      local context = {}
+      object:access(context)
+      assert.is_falsy(context.upstream_certificate)
+      assert.is_falsy(context.upstream_key)
     end)
 
     it("Invalid certificate", function()
@@ -122,9 +117,10 @@ describe('Upstream MTLS policy', function()
       assert.falsy(object.cert)
       assert.falsy(object.cert_key)
 
-      spy.on(object, "set_certs")
-      object:balancer(context)
-      assert.spy(object.set_certs).was_not_called()
+      local context = {}
+      object:access(context)
+      assert.is_falsy(context.upstream_certificate)
+      assert.is_falsy(context.upstream_key)
     end)
 
   end)
@@ -159,30 +155,6 @@ describe('Upstream MTLS policy', function()
       config.ca_certificates = { certificate_content}
       local object = upstream_mtls.new(config)
       assert.same(type(object.ca_store), "cdata")
-    end)
-
-    it("CA certificate is not used if verify is not enabled", function()
-      config.ca_certificates = { certificate_content}
-      config.verify = false
-
-      local object = upstream_mtls.new(config)
-      assert.same(type(object.ca_store), "cdata")
-
-      spy.on(object, "set_ca_cert")
-      object:balancer({})
-      assert.spy(object.set_ca_cert).was_not.called()
-    end)
-
-    it("CA certificate is used if verify is enabled", function()
-      config.ca_certificates = { certificate_content}
-      config.verify = true
-
-      local object = upstream_mtls.new(config)
-      assert.same(type(object.ca_store), "cdata")
-
-      spy.on(object, "set_ca_cert")
-      object:balancer({})
-      assert.spy(object.set_ca_cert).was.called()
     end)
   end)
 end)
