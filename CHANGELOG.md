@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Fixed Conditional policy evaluating incorrectly: second policy in policy chain that implement export() always triggers [PR #1485](https://github.com/3scale/APIcast/pull/1485) [THREESCALE-9320](https://issues.redhat.com/browse/THREESCALE-9320)
 - Fix APIcast using stale configuration for deleted products [PR #1488](https://github.com/3scale/APIcast/pull/1488) [THREESCALE-10130](https://issues.redhat.com/browse/THREESCALE-10130)
 - Fixed Mutual TLS between APIcast and the Backend API fails when using a Forward Proxy [PR #1499](https://github.com/3scale/APIcast/pull/1499) [THREESCALE-5105](https://issues.redhat.com/browse/THREESCALE-5105)
+- Fixed dns cache miss [PR #1500](https://github.com/3scale/APIcast/pull/1500) [THEESCALE-9301](https://issues.redhat.com/browse/THREESCALE-9301)
+- Fixed APIcast panic when parsing invalid base64 encoded value [PR #1505](https://github.com/3scale/APIcast/pull/1505) [THEESCALE-11435](https://issues.redhat.com/browse/THREESCALE-11435)
 
 ### Added
 
@@ -34,6 +36,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - Added the `APICAST_PROXY_BUFFER_SIZE` variable to allow configuration of the buffer size for handling response from the proxied servers. [PR #1473](https://github.com/3scale/APIcast/pull/1473), [THREESCALE-8410](https://issues.redhat.com/browse/THREESCALE-8410)
 
 - Added the `APICAST_HTTPS_VERIFY_CLIENT` variable to allow configuration of the `ssl_verify_client` directive. [PR #1491](https://github.com/3scale/APIcast/pull/1491) [THREESCALE-10156](https://issues.redhat.com/browse/THREESCALE-10156)
+- Add `APICAST_LUA_SOCKET_KEEPALIVE_REQUESTS` to limit the number of requests a single keepalive socket can handle [PR #1496](https://github.com/3scale/APIcast/pull/1496) [THREESCALE-11321](https://issues.redhat.com/browse/THREESCALE-11321)
+- Replace internal OPENSSL module with lua-resty-openssl [PR #1502](https://github.com/3scale/APIcast/pull/1502) [THREESCALE-11412](https://issues.redhat.com/browse/THREESCALE-11412)
 
 ## [3.15.0] 2024-04-04
 

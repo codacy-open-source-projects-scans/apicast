@@ -18,16 +18,17 @@ local dns_client = require 'resty.resolver.dns_client'
 local resty_env = require 'resty.env'
 local upstream = require 'ngx.upstream'
 local re = require('ngx.re')
-local semaphore = require "ngx.semaphore"
+local semaphore = require "ngx.semaphore".new(1)
 local synchronization = require('resty.synchronization').new(1)
-
-local init = semaphore.new(1)
+local table_new = require("table.new")
 
 local default_resolver_port = 53
 
 local _M = {
   _VERSION = '0.1',
 }
+
+local TYPE_A = 1
 
 local mt = { __index = _M }
 
@@ -171,14 +172,14 @@ function _M.init_nameservers(path)
 end
 
 function _M.nameservers()
-  local ok, _ = init:wait(0)
+  local ok, _ = semaphore:wait(0)
 
   if ok and #(_M._nameservers) == 0 then
     _M.init()
   end
 
   if ok then
-    init:post()
+    semaphore:post()
   end
 
   return _M._nameservers
@@ -287,47 +288,6 @@ local function valid_answers(answers)
   return answers and not answers.errcode and #answers > 0 and (not answers.addresses or #answers.addresses > 0)
 end
 
-local function search_dns(self, qname, stale)
-
-  local search = self.search
-  local dns = self.dns
-  local options = self.options
-  local cache = self.cache
-
-  local function get_answer(query)
-    local answers, err
-    answers, err = cache:get(query, stale)
-    if valid_answers(answers) then
-      return answers, err
-    end
-
-    answers, err = dns:query(query, options)
-    if valid_answers(answers) then
-      cache:save(answers)
-      return answers, err
-    end
-    return nil, err
-  end
-
-  if sub(qname, -1) == "." then
-    local query = sub(qname, 1 ,-2)
-    ngx.log(ngx.DEBUG, 'resolver query: ', qname, ' query: ', query)
-    return get_answer(query)
-  end
-
-  local answer, err
-  for i=1, #search do
-    local query = qname .. '.' .. search[i]
-    ngx.log(ngx.DEBUG, 'resolver query: ', qname, ' search: ', search[i], ' query: ', query)
-    answer, err = get_answer(query)
-    if answer then
-      return answer, err
-    end
-  end
-
-  return nil, err
-end
-
 local function resolve_upstream(qname)
   local peers, err = upstream.get_primary_peers(qname)
 
@@ -344,8 +304,52 @@ local function resolve_upstream(qname)
   return peers
 end
 
+-- construct search list from resolv options: search
+-- @param search table of search domain
+-- @param qname the name to query for
+-- @return table with search names
+local function search_list(search, qname)
+  -- FQDN
+  if sub(qname, -1) == "." then
+    local query = sub(qname, 1 ,-2)
+    return {query}
+  end
+
+  local names = table_new(#search +1, 0)
+  for i=1, #search do
+    names[i] = qname .. "." .. search[i]
+  end
+
+  return names
+end
+
+local function search_dns(self, qname)
+
+  local search = self.search
+  local dns = self.dns
+  local options = self.options
+  local queries = search_list(search, qname)
+  local answers, err
+
+  -- Nothing found, append search domain and query DNS server
+  -- Return the first valid answer
+  for _, query in ipairs(queries) do
+    ngx.log(ngx.DEBUG, 'resolver query: ', qname, ' query: ', query)
+
+    answers, err = dns:query(query, options)
+    if valid_answers(answers) then
+      return answers, err
+    end
+  end
+
+  return nil, err
+end
+
+
 function _M.lookup(self, qname, stale)
   local cache = self.cache
+  local options = self.options
+  local qtype = options.qtype or TYPE_A
 
   ngx.log(ngx.DEBUG, 'resolver query: ', qname)
 
@@ -355,19 +359,27 @@ function _M.lookup(self, qname, stale)
     ngx.log(ngx.DEBUG, 'host is ip address: ', qname)
     answers = { new_answer(qname) }
   else
-    if is_fqdn(qname) then
-      answers, err = cache:get(qname, stale)
-    else
+    local key = qname .. ":" .. qtype
+
+    -- Check cache first
+    answers, err = cache:get(key, stale)
+    if valid_answers(answers) then
+      return answers, nil
+    end
+
+    if not is_fqdn(qname) then
       answers, err = resolve_upstream(qname)
+
+      if valid_answers(answers) then
+        return answers, nil
+      end
     end
 
-    if not valid_answers(answers) then
-      answers, err = search_dns(self, qname, stale)
+    answers, err = search_dns(self, qname)
+    if answers then
+      cache:save(qname, qtype, answers)
     end
-
   end
-
-  ngx.log(ngx.DEBUG, 'resolver query: ', qname, ' finished with ', #(answers or empty), ' answers')
 
   return answers, err
 end
@@ -390,6 +402,7 @@ function _M.get_servers(self, qname, opts)
   local ok = sema:wait(0)
 
   local answers, err = self:lookup(qname, not ok)
+  ngx.log(ngx.DEBUG, 'resolver query: ', qname, ' finished with ', #(answers or empty), ' answers')
 
   if ok then
     -- cleanup the key so we don't have unbounded growth of this table

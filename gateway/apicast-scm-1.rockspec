@@ -24,6 +24,7 @@ dependencies = {
    'nginx-lua-prometheus == 0.20181120',
    'lua-resty-jit-uuid',
    'lua-resty-ipmatcher',
+   'lua-resty-openssl'
 }
 build = {
    type = "make",

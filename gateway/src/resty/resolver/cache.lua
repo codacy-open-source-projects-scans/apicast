@@ -12,6 +12,7 @@ local _M = {
   _VERSION = '0.1'
 }
 
+
 local mt = { __index = _M }
 
 local shared_lrucache = resty_lrucache.new(1000)
@@ -35,9 +36,9 @@ local function compact_answers(servers)
 
     if server then
       local name = server.name or server.address
+      local type = server.type
 
       local packed = hash[name]
-
       if packed then
         insert(packed, server)
         packed.ttl = min(packed.ttl, server.ttl)
@@ -45,7 +46,8 @@ local function compact_answers(servers)
         packed = {
           server,
           name = name,
-          ttl = server.ttl
+          ttl = server.ttl,
+          type = type,
         }
 
         insert(compact, packed)
@@ -57,7 +59,7 @@ local function compact_answers(servers)
   return compact
 end
 
-function _M.store(self, answer, force_ttl)
+function _M.store(self, qname, qtype, answer, force_ttl)
   local cache = self.cache
 
   if not cache then
@@ -71,7 +73,17 @@ function _M.store(self, answer, force_ttl)
     return nil, 'invalid answer'
   end
 
-  ngx.log(ngx.DEBUG, 'resolver cache write ', name, ' with TLL ', answer.ttl)
+  local type = answer.type
+
+  if not type then
+    ngx.log(ngx.WARN, 'resolver cache write refused invalid answer type ', inspect(answer))
+    return nil, 'invalid answer'
+  end
+
+  if type == qtype then
+    name = qname
+  end
+
 
   local ttl = force_ttl or answer.ttl
 
@@ -79,15 +91,18 @@ function _M.store(self, answer, force_ttl)
     ttl = nil
   end
 
-  return cache:set(name, answer, ttl)
+  local key = name .. ":" .. qtype
+  ngx.log(ngx.DEBUG, 'resolver cache write ', key, ' with TLL ', ttl)
+
+  return cache:set(key, answer, ttl)
 end
 
 
-function _M.save(self, answers)
+function _M.save(self, qname, qtype, answers)
   local ans = compact_answers(answers or {})
 
   for _, answer in pairs(ans) do
-    local _, err = self:store(answer)
+    local _, err = self:store(qname, qtype, answer)
 
     if err then
       return nil, err

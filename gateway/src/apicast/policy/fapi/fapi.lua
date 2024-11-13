@@ -69,7 +69,7 @@ function _M:access(context)
   if self.validate_oauth2_certificate_bound_access_token then
     if not context.jwt then return error(context.service or {}) end
 
-    local cert = X509.parse_pem_cert(ngx.var.ssl_client_raw_cert)
+    local cert = X509.new(ngx.var.ssl_client_raw_cert)
 
     if not check_certificate(cert, context.jwt.cnf) then
       ngx.log(ngx.WARN, 'fapi oauth_mtls failed for service ', context.service and context.service.id)

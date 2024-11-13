@@ -33,7 +33,7 @@ end
 function _M.access(_, context)
   if not context.jwt then return error(context.service or {}) end
 
-  local cert = X509.parse_pem_cert(ngx.var.ssl_client_raw_cert)
+  local cert = X509.new(ngx.var.ssl_client_raw_cert)
 
   if not check_certificate(cert, context.jwt.cnf) then
     return error(context.service or {})

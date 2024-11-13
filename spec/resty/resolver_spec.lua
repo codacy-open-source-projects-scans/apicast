@@ -55,8 +55,8 @@ describe('resty.resolver', function()
     it('skips answers with no address', function()
       dns.query = spy.new(function()
         return {
-          { name = 'www.3scale.net' , cname = '3scale.net' },
-          { name = '3scale.net' , address = '127.0.0.1' }
+          { name = 'www.3scale.net' , cname = '3scale.net', type = 5 },
+          { name = '3scale.net' , address = '127.0.0.1', type = 1 }
         }
       end)
 
@@ -151,6 +151,29 @@ describe('resty.resolver', function()
       assert.same(err, nil)
     end)
 
+    it("return cached value", function()
+      local dns = {
+        query = spy.new(function(_, name)
+            return { errcode = 3, errstr = 'name error' }
+        end)
+      }
+      local cache = resolver_cache.new()
+      local answer =  {{
+        address = "54.221.221.16",
+        class = 1,
+        name = "test.service.default.svc.cluster.local",
+        section = 1,
+        ttl = 59,
+        type = 1
+      }}
+
+      cache:save('test.service', 1, answer)
+      resolver = resty_resolver.new(dns, { cache = cache, search = {"default.svc.cluster.local"}})
+      local record, err = resolver:lookup('test.service')
+      assert.same("test.service.default.svc.cluster.local", record[1].name)
+      assert.same(err, nil)
+      assert.spy(dns.query).was.called(0)
+    end)
   end)
 
   describe('.parse_resolver', function()

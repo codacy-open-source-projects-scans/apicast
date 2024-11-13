@@ -58,17 +58,17 @@ local function read_ca_certificates(ca_certificates)
   local valid = false
   local store = X509_STORE.new()
   for _,certificate in pairs(ca_certificates) do
-    local cert, err = X509.parse_pem_cert(certificate)
+    local cert, err = X509.new(certificate)
     if cert then
       valid = true
-      store:add_cert(cert)
+      store:add(cert)
     else
       ngx.log(ngx.INFO, "cannot load certificate, err: ", err)
     end
   end
 
   if valid then
-    return store.store
+    return store.ctx
   end
 end
 

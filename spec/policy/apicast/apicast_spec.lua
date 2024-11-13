@@ -43,10 +43,10 @@ describe('APIcast policy', function()
 
     local certificate_content = util.read_file(certificate_path)
     local key_content = util.read_file(certificate_key_path)
-    local ca_cert, _ = X509.parse_pem_cert(certificate_content)
+    local ca_cert, _ = X509.new(certificate_content)
 
     local ca_store = X509_STORE.new()
-    ca_store:add_cert(ca_cert)
+    ca_store:add(ca_cert)
 
     local cert = ssl.parse_pem_cert(certificate_content)
     local key = ssl.parse_pem_priv_key(key_content)

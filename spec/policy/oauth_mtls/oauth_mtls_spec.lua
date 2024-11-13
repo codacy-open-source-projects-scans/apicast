@@ -7,7 +7,7 @@ local header_parameter = 'x5t#S256'
 local context = {}
 
 local function jwt_cnf()
-  return { [header_parameter] = b64.encode_base64url(X509.parse_pem_cert(client):digest('SHA256')) }
+  return { [header_parameter] = b64.encode_base64url(X509.new(client):digest('SHA256')) }
 end
 
 describe('oauth_mtls policy', function()

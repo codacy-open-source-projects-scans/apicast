@@ -7,8 +7,8 @@ local clientCert = assert(fixture('CA', 'client.crt'))
 local header_parameter = 'x5t#S256'
 
 local function jwt_cnf()
-  local cnf = b64.encode_base64url(X509.parse_pem_cert(clientCert):digest('SHA256'))
-  return { [header_parameter] = b64.encode_base64url(X509.parse_pem_cert(clientCert):digest('SHA256')) }
+  local cnf = b64.encode_base64url(X509.new(clientCert):digest('SHA256'))
+  return { [header_parameter] = b64.encode_base64url(X509.new(clientCert):digest('SHA256')) }
 end
 
 describe('fapi_1_baseline_profile policy', function()

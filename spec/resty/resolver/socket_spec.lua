@@ -16,7 +16,7 @@ describe('resty.resolver.socket', function()
       sock:settimeout(1000)
       local wrapper = _M.new(sock)
 
-      wrapper.resolver.cache:save({ { address = '127.0.0.1', name = 'unknown.', ttl = 1800 } })
+      wrapper.resolver.cache:save('unknown', 1, { { address = '127.0.0.1', name = 'unknown.', ttl = 1800, type = 1} })
       assert(wrapper:connect('unknown', 1984))
       assert.equal('unknown', wrapper.host)
       assert.equal(1984, wrapper.port)

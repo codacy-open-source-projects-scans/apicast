@@ -3,6 +3,7 @@ local _M = require('apicast.policy.tls_validation')
 local server = assert(fixture('CA', 'server.crt'))
 local CA = assert(fixture('CA', 'intermediate-ca.crt'))
 local client = assert(fixture('CA', 'client.crt'))
+local ssl_helper = require 'ssl_helper'
 
 describe('tls_validation policy', function()
   describe('.new', function()
@@ -38,7 +39,7 @@ describe('tls_validation policy', function()
 
     it('rejects certificates that are not valid yet', function()
       local policy = _M.new({ whitelist = { { pem_certificate = client }}})
-      policy.x509_store:set_time(os.time{ year = 2000, month = 01, day = 01 })
+      ssl_helper.set_time(policy.x509_store.ctx, os.time{ year = 2000, month = 01, day = 01 })
       ngx.var = { ssl_client_raw_cert = client }
 
       policy:access()
@@ -49,7 +50,7 @@ describe('tls_validation policy', function()
 
     it('rejects certificates that are not longer valid', function()
       local policy = _M.new({ whitelist = { { pem_certificate = client }}})
-      policy.x509_store:set_time(os.time{ year = 2042, month = 01, day = 01 })
+      ssl_helper.set_time(policy.x509_store.ctx, os.time{ year = 2042, month = 01, day = 01 })
       ngx.var = { ssl_client_raw_cert = client }
 
       policy:access()
